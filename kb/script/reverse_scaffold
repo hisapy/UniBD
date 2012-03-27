@@ -1,0 +1,129 @@
+#!/usr/bin/env ruby
+
+# == Synopsis
+#   The reverse_scaffold script executes a Rails scaffold based on an existing table.
+#
+#
+# == Usage (Asuming this script is located under script directory)
+#
+#   ruby script/reverse_scaffold table_name model_name
+#
+#
+# == Examples
+#   ruby script/reverse_scaffold users user
+#
+#
+# == Options
+#   -h, --help          Displays help message
+#   -r, --rspec         Generates rspec_scaffold
+#   -V, --verbose       Outputs the command but doesn't execute it
+#   -v, --version
+#
+#
+# == Author
+#   Anthony Heukmes
+#   http://2dconcept.com
+#   http://github.com/ahe
+#
+#
+# == Copyright
+#   Copyright (c) 2009 Anthony Heukmes. Licensed under the MIT License
+#
+#   Modified in 2012 by Hisakazu Ishibashi (kazutron@gmail.com) to support Rails 3.2.2
+#
+# ==  Changes
+#   Removed Rdoc/Usage because it is not supported on Rails 3.2.2
+#   Fixed the --verbose option. When this option was passed to the program the scaffold was not being generated.
+#   Removed the id field from the list of fields to be generated
+#   Modified the way to add a path to $LOAD_PATH to require 'environment'
+#   Removed the --skip-migration option from the coded command because with this option on, no form fields were generated.
+#   -- skip-migration option is now a program argument.
+#   Moved the require environment just when necessary to improve responsiveness when not performing the scaffold generation.
+#   Camelize and underscore are now user's responsability
+
+$LOAD_PATH.unshift(File.dirname(__FILE__)+'/../config') unless $LOAD_PATH.include?(File.dirname(__FILE__)+'/../config')
+#require 'environment'
+require 'optparse'
+require 'optparse/time'
+require 'ostruct'
+require 'pp'
+
+class ReverseScaffold
+
+  #
+  # Return a structure describing the options.
+  #
+  def parse(args = ARGV)
+    # The options specified on the command line will be collected in *options*.
+    # We set default values here.
+    options = OpenStruct.new
+    options.pk = 'id'
+    options.verbose = false
+    options.skip_migration = ''
+    options.table_name = args[0]
+    options.class_name = args[1]
+    options.command_name = 'scaffold'
+    
+    opts = OptionParser.new do |opts|
+      opts.banner = "Usage: ruby reverse_scaffold [options]"
+
+      opts.separator ""
+      opts.separator "Specific options:"
+
+      # Specify diffent Primary Key name than 'id'.
+      opts.on("--primary-key name", "# Specify diffent Primary Key name than 'id'.") do |pk|
+        options.pk = pk
+      end
+
+      # Boolean switch for being verbose
+      opts.on("-V", "--verbose", "Run verbosely") do |v|
+        options.verbose = v
+      end
+
+      # switch for --skip-migration.
+      opts.on("-s", "--skip-migration", "The same as in 'rails generate scaffold'"){
+        options.skip_migration = '--skip-migration'
+      }
+
+      opts.on('-r', '--rspec') { options.command_name = 'rspec_scaffold' }
+      opts.separator ""
+      opts.separator "Common options:"
+
+      # No argument, shows at tail.  This will print an options summary.
+      # Try it and see!
+      opts.on_tail("-h", "--help", "Show this message") do
+        puts opts
+        exit
+      end
+
+      # Another typical switch to print the version.
+      opts.on_tail("--version", "Show version") do
+        puts 'reverse_scaffold for Ruby on Rails 3.2.2'
+        exit
+      end
+    end
+    if args.length == 0
+      puts opts
+    end
+    opts.parse!(args) unless args.length == 0
+    options
+  end  # parse()
+
+
+  def generate(opts)
+    require 'environment' #This is needed to generate the scaffold
+    eval "class ::#{opts.class_name} < ActiveRecord::Base; set_table_name '#{opts.table_name}' end"
+    klass = eval "::#{opts.class_name}"
+    reverse_scaffold = "rails generate #{opts.command_name} #{opts.class_name} " + opts.skip_migration
+    klass.columns.each do |col|
+      reverse_scaffold << col.name + ":" + col.type.to_s + " " unless col.name == opts.pk
+    end
+
+    puts 'Executing: '+reverse_scaffold unless !opts.verbose
+    system reverse_scaffold
+  end
+
+end  # class ReverseScaffold
+rs = ReverseScaffold.new
+options = rs.parse
+rs.generate(options)
